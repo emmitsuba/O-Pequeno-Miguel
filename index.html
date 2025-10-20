@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plataforma Infinita com Limite de Fase</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #007fff;
+            /* Aplicar a fonte pixelada globalmente para o HUD e Texto */
+            font-family: 'Press Start 2P', cursive; 
+        }
+        #gameCanvas {
+            border: 5px solid #6e6e6e;
+        }
+        
+        /* 2. ESTILOS DO PAINEL DE MENSAGEM */
+        #messagePanel {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            /* Ajustes de layout para melhor visualização da mensagem */
+            width: 450px; 
+            min-height: 100px;
+            background-color: rgba(0, 0, 0, 0.9); 
+            border: 3px solid white;
+            color: white;
+            
+            /* A fonte já está no body, mas garantimos aqui e ajustamos o tamanho */
+            font-size: 16px; /* Reduzimos para caber melhor, pixel fonts são grandes */
+            line-height: 1.5; /* Aumentamos o espaçamento da linha */
+            
+            text-align: center;
+            padding: 15px; 
+            box-sizing: border-box; 
+            display: none;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1200" height="700"></canvas>
+    <div id="messagePanel"></div>
+    <script>
+        // --- CONFIGURAÇÃO INICIAL E CONSTANTES ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const messagePanel = document.getElementById('messagePanel');
+        
+        const SCALE_FACTOR = 2;
+        
+        const CW = canvas.width;
+        const CH = canvas.height;
+        
+        const GRAVITY = 0.5 * SCALE_FACTOR;
+        const JUMP_POWER = -11 * SCALE_FACTOR;
+        const MOVE_SPEED = 3 * SCALE_FACTOR;
+        
+        const ANIMATION_SPEED = 5;
+        const BODY_BOB = 2 * SCALE_FACTOR;
+        
+        const CAMERA_Y_ANCHOR = CH * 0.65;
+        const PARALLAX_FACTOR = 0.3;
+        
+        const PLATFORM_HEIGHT = 10 * SCALE_FACTOR;
+        const PLATFORM_MIN_WIDTH = 50 * SCALE_FACTOR;
+        const PLATFORM_MAX_WIDTH = 100 * SCALE_FACTOR;
+        const WORLD_GEN_THRESHOLD = CW * 0.1;
+        
+        const WORLD_LENGTH_PHASE_1 = 3000 * SCALE_FACTOR;
+        
+        let currentPhase = 1; 
+
+        const MAX_Y_CHANGE = 120 * SCALE_FACTOR;
+        const MAX_GAP = 2.3;
+        const MIN_GAP = 0.8;
+        const JUMP_HEIGHT = JUMP_POWER * -1.5;
+        const MIN_PLATFORM_HEIGHT_FROM_GROUND = 80 * SCALE_FACTOR;
+        
+        const GROUND_LEVEL_Y = 574;
+        
+        let camera = {
+            x: 0,
+            y: 0
+        };
+        
+        let score = 0;
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerRunning = false;
+        
+        let isGameOver = false;
+
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // --- CARREGAMENTO DE IMAGENS ---
+        
+        const BACKGROUND_URL_PHASE_1 = 'https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/pixil-frame-0%20(6).png';
+        const PLATFORM_TEXTURE_URL_PHASE_1 = 'https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/pixil-frame-0%20(7).png';
+        
+        const backgroundImage = new Image();
+        let backgroundLoaded = false;
+        const platformTextureImage = new Image();
+        let platformTextureLoaded = false;
+        
+        const starImage = new Image();
+        let starImageLoaded = false;
+
+        function loadPhaseAssets() {
+            backgroundLoaded = false;
+            platformTextureLoaded = false;
+
+            backgroundImage.onload = () => { backgroundLoaded = true; };
+            backgroundImage.onerror = () => { console.error("Erro ao carregar imagem de background."); };
+            backgroundImage.src = BACKGROUND_URL_PHASE_1;
+            
+            platformTextureImage.onload = () => { platformTextureLoaded = true; };
+            platformTextureImage.onerror = () => { console.error("Erro ao carregar textura da plataforma."); };
+            platformTextureImage.src = PLATFORM_TEXTURE_URL_PHASE_1;
+
+            starImage.onload = () => { starImageLoaded = true; };
+            starImage.onerror = () => { console.error("Erro ao carregar a imagem do Avião."); };
+            starImage.src = "https://uploads.onecompiler.io/43s2gnt72/43zr2vkng/pixil-frame-0.png";
+        }
+
+        loadPhaseAssets();
+        
+        // --- OBJETO JOGADOR ---
+        let player = { 
+            x: 50,
+            y: GROUND_LEVEL_Y - 60 * SCALE_FACTOR, 
+            w: 48 * SCALE_FACTOR,
+            h: 60 * SCALE_FACTOR,
+            velX: 0,
+            velY: 0,
+            isJumping: false,
+            frame: 0,
+            frameTimer: 0,
+            direction: 1,
+            img: new Image(),
+            imageLoaded: false,
+
+            load: function(url) {
+                this.img.onload = () => { this.imageLoaded = true; };
+                this.img.onerror = () => { console.error("Erro ao carregar a imagem do Player."); };
+                this.img.src = url;
+            },
+            draw: function() {
+                const px = this.x - camera.x;
+                const py = this.y - camera.y;
+                const pw = this.w;
+                const ph = this.h;
+                
+                let body_offset_y = 0;
+                if (Math.abs(this.velX) > 0 && !this.isJumping) {
+                    if (this.frame === 0 || this.frame === 2) {
+                        body_offset_y = BODY_BOB;
+                    }
+                }
+                
+                ctx.save();
+                if (this.direction === -1) {
+                    ctx.translate(px + pw / 2, 0);
+                    ctx.scale(-1, 1);
+                    ctx.translate(-(px + pw / 2), 0);
+                }
+                if (this.imageLoaded) {
+                    ctx.drawImage(this.img, px, py + body_offset_y, pw, ph - body_offset_y);
+                } else {
+                    ctx.fillStyle = '#FF4500'; 
+                    ctx.fillRect(px, py + body_offset_y, pw, ph - body_offset_y);
+                }
+                ctx.restore();
+            }
+        };
+        
+        player.load("https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/1000112034.png");
+
+        // --- ITEM FINAL (AVIÃO) ---
+        
+        let finalItem = null; 
+        
+        function createStar(x, y) {
+            return {
+                x: x, 
+                y: y,
+                w: 30 * SCALE_FACTOR, 
+                h: 30 * SCALE_FACTOR,
+                isCollected: false,
+                isFinal: true
+            };
+        }
+
+        function drawFinalItem() {
+            if (!finalItem || finalItem.isCollected) return;
+
+            const starScreenX = finalItem.x - camera.x;
+            const starScreenY = finalItem.y - camera.y;
+
+            if (starImageLoaded) {
+                ctx.drawImage(starImage, starScreenX, starScreenY, finalItem.w, finalItem.h);
+            } else { 
+                ctx.fillStyle = '#FFD700'; 
+                ctx.fillRect(starScreenX, starScreenY, finalItem.w, finalItem.h);
+            }
+        }
+        
+        function showMessagePanel(message) {
+            messagePanel.innerHTML = message;
+            messagePanel.style.display = 'block';
+        }
+        
+        // --- PLATAFORMAS (DEFINIÇÃO DO MAPA) ---
+        let platforms = [
+            {x: 0, y: GROUND_LEVEL_Y, w: CW * 1000, h: 1, isGround: true}, 
+        ];
+
+        let lastPlatformX = 0;
+        let lastPlatformY = GROUND_LEVEL_Y; 
+        
+        // --- FUNÇÃO DE GERAÇÃO DE PLATAFORMAS PROCEDURAIS METICULOSAS ---
+        function generateRandomPlatforms() {
+            if (lastPlatformX >= WORLD_LENGTH_PHASE_1) {
+                
+                if (!finalItem) {
+                    const lastPlatform = platforms.slice().reverse().find(p => !p.isGround); 
+                    
+                    const itemWidth = 30 * SCALE_FACTOR;
+                    const itemHeight = 30 * SCALE_FACTOR;
+
+                    if (lastPlatform) {
+                        finalItem = createStar(
+                            lastPlatform.x + lastPlatform.w / 2 - itemWidth / 2, 
+                            lastPlatform.y - itemHeight
+                        );
+                    } else {
+                        // FALLBACK ROBUSTO
+                        finalItem = createStar(WORLD_LENGTH_PHASE_1 - itemWidth, GROUND_LEVEL_Y - itemHeight);
+                    }
+                }
+                
+                return;
+            }
+            
+            const remainingWidth = WORLD_LENGTH_PHASE_1 - lastPlatformX;
+            const generationWidth = Math.min(CW * 1.5, remainingWidth); 
+            
+            if (generationWidth <= 0) return;
+
+            const startX = lastPlatformX; 
+            let currentX = startX + getRandomInt(player.w * 2, player.w * 3); 
+            
+            let platformGeneratedNearLimit = false; 
+
+            while (currentX < startX + generationWidth) {
+                
+                const pWidth = getRandomInt(PLATFORM_MIN_WIDTH, PLATFORM_MAX_WIDTH);
+                
+                // 1. CALCULA O NOVO Y 
+                const minChangeY = lastPlatformY - MAX_Y_CHANGE;
+                const maxChangeY = lastPlatformY + MAX_Y_CHANGE;
+                const y_min = player.h * 2; 
+                const y_max = GROUND_LEVEL_Y - PLATFORM_HEIGHT - MIN_PLATFORM_HEIGHT_FROM_GROUND; 
+                const maxUpY = lastPlatformY - JUMP_HEIGHT; 
+
+                let newY = getRandomInt(
+                    Math.max(y_min, minChangeY, maxUpY), 
+                    Math.min(y_max, maxChangeY)          
+                );
+                
+                // 2. DEFINE O GAP 
+                const currentGapMultiplier = Math.random() < 0.5 ? MAX_GAP : MIN_GAP; 
+                const minGap = player.w * MIN_GAP; 
+                const maxGap = player.w * currentGapMultiplier; 
+                
+                const nextPlatformEnd = currentX + pWidth;
+                
+                if (nextPlatformEnd <= WORLD_LENGTH_PHASE_1) {
+                    platforms.push({x: currentX, y: newY, w: pWidth, h: PLATFORM_HEIGHT, isGround: false});
+
+                    // 3. ATUALIZA RASTREADORES
+                    lastPlatformY = newY;
+                    lastPlatformX = currentX + pWidth;
+                    currentX = lastPlatformX + getRandomInt(minGap, maxGap);
+                    
+                } else {
+                    const finalPWidth = WORLD_LENGTH_PHASE_1 - currentX;
+                    if (finalPWidth > PLATFORM_MIN_WIDTH / 2) {
+                         platforms.push({x: currentX, y: newY, w: finalPWidth, h: PLATFORM_HEIGHT, isGround: false});
+                         lastPlatformX = currentX + finalPWidth;
+                    }
+                    platformGeneratedNearLimit = true;
+                    break;
+                }
+            }
+            
+            if (lastPlatformX >= WORLD_LENGTH_PHASE_1 || platformGeneratedNearLimit) {
+                generateRandomPlatforms(); 
+            }
+
+            platforms = platforms.filter(p => p.isGround || p.x + p.w > camera.x - CW);
+        }
+
+        generateRandomPlatforms(); 
+
+        // --- ENTRADAS, UPDATE, DRAW (Inalterado) ---
+        let keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (!isGameOver && (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && !player.isJumping) {
+                player.velY = JUMP_POWER;
+                player.isJumping = true;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        function checkCollision(obj1, obj2) {
+            return (
+                obj1.x < obj2.x + obj2.w && 
+                obj1.x + obj1.w > obj2.x &&
+                obj1.y < obj2.y + obj2.h &&
+                obj1.y + obj1.h > obj2.y
+            );
+        }
+
+        function updateAnimation() {
+            if (Math.abs(player.velX) > 0 && !player.isJumping) {
+                player.frameTimer++;
+                if (player.frameTimer >= ANIMATION_SPEED) {
+                    player.frameTimer = 0;
+                    player.frame = (player.frame + 1) % 3;
+                }
+            } else {
+                player.frame = 1;
+                player.frameTimer = 0;
+            }
+        }
+
+        function updateCamera() {
+            const playerScreenY = player.y - camera.y;
+
+            if (playerScreenY < CAMERA_Y_ANCHOR - 100) {
+                camera.y = player.y - (CAMERA_Y_ANCHOR - 100);
+            }
+            if (playerScreenY > CAMERA_Y_ANCHOR + 50) {
+                camera.y = player.y - (CAMERA_Y_ANCHOR + 50);
+            }
+            if (camera.y < 0) {
+                camera.y = 0;
+            }
+        }
+        
+        function formatTime(ms) {
+            const totalSeconds = ms / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            const milliseconds = Math.floor((totalSeconds % 1) * 100);
+            const pad = (num, size = 2) => ('000' + num).slice(size * -1);
+            return `${pad(minutes)}:${pad(seconds)}.${pad(milliseconds)}`;
+        }
+        
+        function drawBackground() {
+            if (!backgroundLoaded) {
+                ctx.fillStyle = '#ADD8E6';
+                ctx.fillRect(0, 0, CW, CH);
+                return;
+            }
+            
+            const bgW = backgroundImage.width;
+            const bgH = backgroundImage.height;
+            const ratio = Math.max(CW / bgW, CH / bgH);
+            const destW = bgW * ratio;
+            const destH = CH;
+
+            let bgOffset = (camera.x * PARALLAX_FACTOR) % destW;
+            if (bgOffset < 0) bgOffset += destW;
+            
+            ctx.drawImage(backgroundImage, 0, 0, bgW, bgH, -bgOffset, 0, destW, destH);
+            ctx.drawImage(backgroundImage, 0, 0, bgW, bgH, -bgOffset + destW, 0, destW, destH);
+        }
+
+
+        function update() {
+            if (isGameOver) {
+                timerRunning = false;
+                return;
+            }
+            
+            let movementX = 0;
+            player.velX = 0;
+            
+            if (keys['ArrowLeft'] || keys['KeyA']) {
+                movementX = -MOVE_SPEED; 
+                player.velX = -MOVE_SPEED;
+                player.direction = -1;
+            }
+            if (keys['ArrowRight'] || keys['KeyD']) {
+                movementX = MOVE_SPEED;
+                player.velX = MOVE_SPEED;
+                player.direction = 1;
+            }
+
+            if (!timerRunning && (Math.abs(movementX) > 0 || keys['Space'] || keys['ArrowUp'] || keys['KeyW'])) {
+                startTime = performance.now();
+                timerRunning = true;
+            }
+            if (timerRunning) {
+                elapsedTime = performance.now() - startTime;
+            }
+
+            updateAnimation();
+
+            player.velY += GRAVITY;
+            player.y += player.velY;
+            
+            player.x += movementX;
+            
+            if (player.x + player.w >= WORLD_LENGTH_PHASE_1) {
+                player.x = WORLD_LENGTH_PHASE_1 - player.w; 
+                player.velX = 0;
+            }
+            
+            camera.x = player.x - 50; 
+            
+            if (player.x > lastPlatformX - CW + WORLD_GEN_THRESHOLD && lastPlatformX < WORLD_LENGTH_PHASE_1) {
+                generateRandomPlatforms();
+            }
+
+            updateCamera();
+
+            platforms.forEach(p => {
+                if (
+                    player.x + player.w > p.x &&
+                    player.x < p.x + p.w &&
+                    player.y + player.h <= p.y + player.velY && 
+                    player.y + player.h >= p.y && 
+                    player.velY >= 0 
+                ) {
+                    player.y = p.y - player.h;
+                    player.velY = 0;
+                    player.isJumping = false;
+                }
+            });
+
+            if (player.y + player.h > GROUND_LEVEL_Y && player.velY >= 0) {
+                player.y = GROUND_LEVEL_Y - player.h;
+                player.velY = 0;
+                player.isJumping = false;
+            }
+
+            if (player.y > CH * 2) { 
+                player.x = camera.x + 100;
+                player.y = GROUND_LEVEL_Y - player.h; 
+                player.velY = 0;
+                player.isJumping = false;
+                camera.y = 0;
+            }
+            
+            // Colisão com Item Final (Avião)
+            if (finalItem && !finalItem.isCollected) {
+                const itemWorld = { x: finalItem.x, y: finalItem.y, w: finalItem.w, h: finalItem.h }; 
+                const playerWorld = { x: player.x, y: player.y, w: player.w, h: player.h }; 
+                
+                if (checkCollision(playerWorld, itemWorld)) {
+                    finalItem.isCollected = true;
+                    score++;
+                    isGameOver = true; 
+                    showMessagePanel('—Um avião? Nunca vi nada parecido por aqui. Parece... familiar de alguma história que já li.');
+                }
+            }
+        }
+
+        // --- DRAW (Ajuste da Fonte no Canvas) ---
+        function draw() {
+            ctx.clearRect(0, 0, CW, CH);
+
+            drawBackground();
+
+            const groundYScreen = GROUND_LEVEL_Y - camera.y;
+            ctx.fillStyle = 'transparent'; 
+            ctx.fillRect(0, groundYScreen + 1, CW, CH - groundYScreen - 1); 
+
+            platforms.forEach(p => {
+                if (!p.isGround) {
+                    const screenX = p.x - camera.x;
+                    const screenY = p.y - camera.y;
+                    
+                    if (screenX + p.w > 0 && screenX < CW) {
+                        if (platformTextureLoaded) {
+                            ctx.drawImage(platformTextureImage, screenX, screenY, p.w, p.h);
+                        } else { 
+                            ctx.fillStyle = '#888888';
+                            ctx.fillRect(screenX, screenY, p.w, p.h);
+                        }
+                    }
+                }
+            });
+
+            player.draw();
+
+            drawFinalItem();
+
+            // --- HUD (Aplicando a Fonte Press Start 2P) ---
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            
+            // Fonte principal (Tempo)
+            // ANTES: ctx.font = '20px Arial'; 
+            ctx.font = '20px "Press Start 2P", cursive'; 
+            ctx.fillText(`TEMPO: ${formatTime(elapsedTime)}`, 10, 25); 
+
+            // Fonte secundária (Controles, Estrelas, Progresso)
+            // ANTES: ctx.font = '16px Arial'; 
+            ctx.font = '12px "Press Start 2P", cursive'; // Reduzindo o tamanho para 12px para melhor legibilidade no Canvas
+            
+            ctx.fillText('SETAS/AD: ANDAR | ESPAÇO/W: PULAR', 10, 50); 
+            ctx.fillText(`ESTRELAS: ${score}`, 10, 75);
+            
+            const progress = Math.min(100, Math.floor(player.x / WORLD_LENGTH_PHASE_1 * 100));
+            ctx.fillText(`PROGRESSO: ${progress}%`, 10, 100);
+        }
+
+        // --- GAME LOOP ---
+        function loop() {
+            update(); 
+            draw(); 
+            requestAnimationFrame(loop);
+        }   
+
+        loop();
+    </script>
+</body>
+</html>
