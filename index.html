@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plataforma Infinita com Limite de Fase</title>
+    <title>O Pequeno Explorador: Fase com Múltiplos Backgrounds e Diálogos Interativos</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     
@@ -14,134 +14,387 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            background-color: #007fff;
-            /* Aplicar a fonte pixelada globalmente para o HUD e Texto */
-            font-family: 'Press Start 2P', cursive; 
+            background-color: #007fff; /* Fundo do corpo */
+            font-family: 'Press Start 2P', cursive;
         }
         #gameCanvas {
             border: 5px solid #6e6e6e;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background-color: #ADD8E6; /* Cor de fallback */
         }
         
-        /* 2. ESTILOS DO PAINEL DE MENSAGEM */
+        /* Painel de Diálogo */
         #messagePanel {
             position: absolute;
-            top: 10%;
+            top: 50%;
             left: 50%;
-            transform: translateX(-50%);
-            /* Ajustes de layout para melhor visualização da mensagem */
-            width: 450px; 
+            transform: translate(-50%, -50%);
+            width: 450px;
             min-height: 100px;
-            background-color: rgba(0, 0, 0, 0.9); 
+            background-color: rgba(0, 0, 0, 0.95);
             border: 3px solid white;
             color: white;
-            
-            /* A fonte já está no body, mas garantimos aqui e ajustamos o tamanho */
-            font-size: 16px; /* Reduzimos para caber melhor, pixel fonts são grandes */
-            line-height: 1.5; /* Aumentamos o espaçamento da linha */
-            
+            font-size: 16px;
+            line-height: 1.5;
             text-align: center;
-            padding: 15px; 
-            box-sizing: border-box; 
-            display: none;
-            pointer-events: none;
+            padding: 15px;
+            padding-bottom: 45px; /* Espaço para o botão */
+            box-sizing: border-box;
+            display: none; /* Inicia oculto */
             z-index: 100;
+            cursor: default;
+        }
+        
+        /* Estilos do Painel de Quiz */
+        #quizPanel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 450px;
+            min-height: 150px; 
+            background-color: rgba(10, 10, 40, 0.98); 
+            border: 3px solid #FFD700; 
+            color: white;
+            font-size: 16px;
+            line-height: 1.5;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+            display: none; /* Inicia oculto */
+            z-index: 110; /* Acima do diálogo */
+            cursor: default;
+        }
+
+        #quizPanel .question-text {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #00FFFF;
+        }
+
+        #quizButtons {
+            display: flex;
+            justify-content: space-around;
+            padding-top: 10px;
+        }
+
+        .quiz-button {
+            background-color: #4CAF50; /* Cor padrão para SIM */
+            color: white;
+            border: 2px solid black;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            box-shadow: 3px 3px 0px black;
+            transition: background-color 0.1s;
+        }
+        .quiz-button:hover {
+            background-color: #45a049;
+        }
+        .quiz-button.nao {
+            background-color: #F44336; /* Cor para NÃO */
+        }
+        .quiz-button.nao:hover {
+            background-color: #e53935;
+        }
+
+
+        /* Estilos dos Ícones de Diálogo */
+        #messagePanel img.icon-dialogue {
+            position: absolute;
+            top: -92px;
+            left: 1px;
+            width: 90px;
+            height: auto;
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.8));
+        }
+        
+        /* Estilo para o Nome do Falante */
+        #messagePanel .speaker-name {
+            color: #FFD700;
+            font-size: 18px;
+            margin-bottom: 5px;
+            display: block;
+            text-align: left;
+            padding-left: 60px; /* Espaço para o ícone */
+        }
+        
+        /* Estilo para o Conteúdo da Fala */
+        #messagePanel .message-content {
+            text-align: left; 
+            padding-left: 60px;
+        }
+        
+        /* Estilos do botão Próximo */
+        #nextButton {
+            background-color: #FFD700;
+            color: black;
+            border: 2px solid black;
+            padding: 8px 15px;
+            font-size: 14px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            box-shadow: 2px 2px 0px black;
+        }
+        #nextButton:hover {
+            background-color: #FFA500;
         }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="1200" height="700"></canvas>
     <div id="messagePanel"></div>
+    <div id="quizPanel"></div>
+    
     <script>
         // --- CONFIGURAÇÃO INICIAL E CONSTANTES ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        
         const messagePanel = document.getElementById('messagePanel');
+        const quizPanel = document.getElementById('quizPanel'); // Referência ao novo painel do quiz
         
         const SCALE_FACTOR = 2;
-        
         const CW = canvas.width;
         const CH = canvas.height;
         
+        // Parâmetros de física
         const GRAVITY = 0.5 * SCALE_FACTOR;
         const JUMP_POWER = -11 * SCALE_FACTOR;
-        const MOVE_SPEED = 3 * SCALE_FACTOR;
+        const MOVE_SPEED = 50 * SCALE_FACTOR;
         
+        // Parâmetros visuais e de mundo
         const ANIMATION_SPEED = 5;
         const BODY_BOB = 2 * SCALE_FACTOR;
-        
-        const CAMERA_Y_ANCHOR = CH * 0.65;
         const PARALLAX_FACTOR = 0.3;
-        
         const PLATFORM_HEIGHT = 10 * SCALE_FACTOR;
         const PLATFORM_MIN_WIDTH = 50 * SCALE_FACTOR;
-        const PLATFORM_MAX_WIDTH = 100 * SCALE_FACTOR;
         const WORLD_GEN_THRESHOLD = CW * 0.1;
         
-        const WORLD_LENGTH_PHASE_1 = 3000 * SCALE_FACTOR;
-        
-        let currentPhase = 1; 
-
-        const MAX_Y_CHANGE = 120 * SCALE_FACTOR;
-        const MAX_GAP = 2.3;
-        const MIN_GAP = 0.8;
-        const JUMP_HEIGHT = JUMP_POWER * -1.5;
-        const MIN_PLATFORM_HEIGHT_FROM_GROUND = 80 * SCALE_FACTOR;
-        
+        // Comprimento do mundo (distância a percorrer)
+        const WORLD_LENGTH_PHASE_1 = 10000 * SCALE_FACTOR;
         const GROUND_LEVEL_Y = 574;
         
-        let camera = {
-            x: 0,
-            y: 0
-        };
+        // --- VARIÁVEIS DE ESTADO DE DIÁLOGO E QUIZ ---
+        let currentDialogue = null; 
+        let currentLineIndex = 0; 
+        let isDialogueRunning = false;
+ 
+        // --- VARIÁVEIS DE ESTADO DE JOGO E TRANSIÇÃO ---
+        let gameProgress = 0; // Contagem de itens coletados (0 a 10)
+        let collectibles = [];
+        let hasItemsBeenPlaced = false; // Flag para a colocação dos itens
         
+        let camera = { x: 0, y: 0 };
         let score = 0;
         let startTime = 0;
         let elapsedTime = 0;
         let timerRunning = false;
-        
         let isGameOver = false;
 
+        // Variáveis para a Transição de Tela Final
+        let isTransitioning = false;
+        let transitionY = -CH; // Inicia fora da tela, acima
+        const TRANSITION_SPEED = 20; 
+        
+        // Variável de estado para o diálogo final
+        let hasFinalDialogueRun = false; 
+
+        // NOVO: O URL do background da fase final (75% - 100%) - ALTÉRÁVEL
+        const FINAL_BACKGROUND_URL = 'https://uploads.onecompiler.io/43s2gnt72/442e8srt4/pixil-frame-0%20(20).png'; 
+
+        // Cor da transição preta (mantida)
+        const FINAL_SCREEN_COLOR = '#1A1A3A'; 
+
+        // --- CONFIGURAÇÃO DO QUIZ ---
+        const QUIZ_QUESTIONS = [
+            // As respostas 'Sim' ou 'Não' abaixo são o GABARITO.
+            // Você pode mudar as perguntas e as respostas depois.
+            { question: "Você acredita que, para fazer um amigo de verdade, é preciso ter bastante paciência?", correct: "Sim" },
+            { question: "Você já se sentiu triste quando um amigo foi embora, mesmo sabendo que ele voltaria?", correct: "Sim" },
+            { question: "Você pensa que as coisas mais importantes da vida, como o amor e a amizade, podem ser vistas com os olhos?", correct: "Não" }, 
+            { question: "Você concorda que um amigo se torna único no mundo para a gente, mesmo que existam outras pessoas parecidas com ele?", correct: "Sim" }
+        ];
+
+        let currentQuizIndex = 0;
+        let quizScore = 0;
+        let isQuizRunning = false;
+        
+        // --- DIÁLOGO FINAL ---
+        const END_GAME_DIALOGUE = [ 
+            { speaker: 'raposa', text: 'Sua jornada terminou. O que você cativou aqui o acompanhará. Para começar uma nova aventura, você deve recarregar o seu caminho.' }
+        ];
+
+        // --- CONFIGURAÇÃO DOS ITENS COLETÁVEIS (10 ITENS) ---
+        
+        // URLs das imagens de itens (genéricas)
+        const PLAYER_IMAGE_URL = "https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/1000112034.png";
+        
+        const COLLECTIBLE_IMAGE_URLS = {
+            'principe': 'https://uploads.onecompiler.io/43s2gnt72/43zr2vkng/pixil-frame-0%20(10).png',
+            'aviao': 'https://uploads.onecompiler.io/43s2gnt72/43zr2vkng/pixil-frame-0%20(11).png', // aviao
+            'petala01': 'https://uploads.onecompiler.io/43s2gnt72/442b8p5em/petala1.png', // petala01
+            'petala02': 'https://uploads.onecompiler.io/43s2gnt72/442b8p5em/petala2.png', // petala02
+            'petala03': 'https://uploads.onecompiler.io/43s2gnt72/442b8p5em/petala3.png', // petala03
+            'petala04': 'https://uploads.onecompiler.io/43s2gnt72/442b8p5em/petala4.png', // petala04
+            'coroa': 'https://uploads.onecompiler.io/43s2gnt72/442bf3nn3/coroa.png', // coroa
+            'garrafa': 'https://uploads.onecompiler.io/43s2gnt72/442bf3nn3/32504890-pixel-arte-ilustracao-cerveja-garrafa-pixelizada-cerveja-cerveja-garrafa-icone-pixelizada-para-a-pixel-arte-jogos-e-icone-para-local-na-rede-internet-e-video-jogo-velho-escola-retro-vetor-rem.png', // garrafa
+            'papel': 'https://uploads.onecompiler.io/43s2gnt72/442bf3nn3/pixil-frame-0%20(13).png', // papel
+            'livro': 'https://uploads.onecompiler.io/43s2gnt72/442bf3nn3/pixil-frame-0%20(15).png', // livro
+            'raposa': 'https://uploads.onecompiler.io/43s2gnt72/442e8srt4/pixil-frame-0%20(21).png', // raposa (Final)
+            'miguel_icon': 'https://uploads.onecompiler.io/43s2gnt72/442bf3nn3/pixil-frame-0%20(16).png', // Ícone do personagem principal
+        };
+        
+        // Lista completa dos 10 itens com suas posições e **novos diálogos estruturados**
+        const COLLECTIBLE_ITEMS = [
+            // { type: 'tipo', name: 'Nome do Item', progress: X%, dialogueLines: [{speaker: 'key', text: 'Fala'}], isFinal: false }
+            
+            // 1. aviao (Pequeno Príncipe aparece)
+            { 
+                type: 'aviao', 
+                name: 'rosa 🌹', 
+                progress: 20, 
+                dialogueLines: [
+                    { speaker: 'miguel', text: 'Ao ver o avião: Isso é meio familiar...' },
+                    { speaker: 'principe', text: 'Que engraçado! Achou o pássaro de metal que perdi. Pode me ajudar a encontrar meus amigos?' },
+                    { speaker: 'miguel', text: 'Ah, claro! Será uma honra!' }
+                ], 
+                isFinal: false 
+            },
+            // 2. petala01
+            { type: 'petala01', name: 'Flor 🌸', progress: 30, dialogueLines: [{ speaker: 'miguel', text: 'A primeira pétala! Sinto a Força... É o poder para continuar!' }], isFinal: false },
+            // 3. petala02
+            { type: 'petala02', name: 'Mapa 🗺️', progress: 35, dialogueLines: [{ speaker: 'miguel', text: 'A segunda pétala! Estava escondida, exigindo Sabedoria para ser encontrada!' }], isFinal: false },
+            // 4. petala03
+            { type: 'petala03', name: 'Chave 🔑', progress: 40, dialogueLines: [{ speaker: 'miguel', text: 'A terceira pétala me aquece. Ela é o Amor, minha maior proteção.' }], isFinal: false },
+            // 5. petala04
+            { type: 'petala04', name: 'Estrela ⭐', progress: 45, dialogueLines: [{ speaker: 'miguel', text: 'A última pétala! A União está completa, o objetivo está ao meu alcance. Agora, vamos prosseguir com a nossa jornada' }], isFinal: false },
+            // 6. coroa
+            { type: 'coroa', name: 'Moeda 🪙', progress: 55, dialogueLines: [{ speaker: 'miguel', text: 'Ele caminha até encontrar uma coroa: Pontiaguda e brilhante!' }], isFinal: false },
+            // 7. garrafa
+            { type: 'garrafa', name: 'Presente 🎁', progress: 60, dialogueLines: [{ speaker: 'miguel', text: 'Seguindo seu caminho, ele encontra uma garrafa: Que cheiro forte.' }], isFinal: false },
+            // 8. papel
+            { type: 'papel', name: 'Globo Terrestre 🌐', progress: 65, dialogueLines: [{ speaker: 'miguel', text: 'Após isso, encontra um papel: Quantos números!' }], isFinal: false },
+            // 9. livro (Voz do Príncipe)
+            { 
+                type: 'livro', 
+                name: 'Lanterna 🏮', 
+                progress: 70, 
+                dialogueLines: [
+                    { speaker: 'miguel', text: 'Encontra um gigantesco livro: Apenas para exploradores, como sou um explorador, eu posso ler esse imenso livro!' },
+                    { speaker: 'principe', text: '*A voz do pequeno príncipe clama de longe* Finalmente encontrastes os adultos, vamos que precisamos encontrar a minha amiga raposa!' }
+                ], 
+                isFinal: false 
+            },
+            // 10. raposa (Diálogo final - Precedido pelo Quiz)
+            { 
+                type: 'raposa', 
+                name: 'Raposa (Final) 🦊', 
+                progress: 99, 
+                dialogueLines: [
+                    { speaker: 'raposa', text: 'Então, você conseguiu. Você atravessou todos aqueles mundos. Os homens grandes teriam desistido. Eles não têm tempo para o que realmente importa.' },
+                    { speaker: 'miguel', text: 'Foi difícil. Às vezes eu me sentia muito sozinho.' },
+                    { speaker: 'raposa', text: 'Mas você procurou com o coração. E só se vê bem com o coração. Você não estava procurando apenas pedaços de papel, estava?' },
+                    { speaker: 'miguel', text: 'Acho que estava procurando o sentido.' },
+                    { speaker: 'raposa', text: 'E você o encontrou. Você cativou a história novamente. Você deu seu tempo a ela. E agora, ela é importante para você. E você é importante para ela. Você se tornou responsável por ela.'},
+                    { speaker: 'raposa', text: 'Mas agora, pequeno viajante, seu tempo neste mundo acabou. Você não pertence aqui. Este é o mundo das memórias.'},
+                    { speaker: 'raposa', text: 'Estou lhe dando o seu caminho de volta. Você não pode ficar onde as coisas já terminaram. Você tem suas próprias coisas para cativar no seu mundo. Você tem suas próprias responsabilidades.'},
+                    { speaker: 'miguel', text: 'Mas... e se eu esquecer?'},
+                    { speaker: 'raposa', text: 'Você não vai nos esquecer, terá boas lembranças todas as vezes que olhar o teu livro.'},
+                    { speaker: 'miguel', text: 'Eu vou sentir falta daqui.'},
+                    { speaker: 'raposa', text: 'Isso é bom. Significa que o que aconteceu foi real. Agora, feche os olhos. Não olhe para a partida. Pense apenas naquilo que espera por você.'},
+                    { speaker: 'miguel', text: 'Adeus, Raposa!'},
+                    { speaker: 'raposa', text: 'Adeus! E lembre-se de nós.'},
+                ], 
+                isFinal: true 
+            } // Item final para terminar a fase
+        ];
+        
         function getRandomInt(min, max) {
             return Math.floor(Math.random() * (max - min + 1)) + min;
         }
 
-        // --- CARREGAMENTO DE IMAGENS ---
+        // --- CARREGAMENTO DE IMAGENS E GESTÃO DE ASSETS ---
         
-        const BACKGROUND_URL_PHASE_1 = 'https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/pixil-frame-0%20(6).png';
+        const BACKGROUND_URLS = [
+            'https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/pixil-frame-0%20(6).png', 
+            'https://uploads.onecompiler.io/43s2gnt72/43zr2vkng/pixil-frame-0%20(9).png', 
+            'https://uploads.onecompiler.io/43s2gnt72/442bf3nn3/pixil-frame-0%20(18).png', 
+            FINAL_BACKGROUND_URL // O ÚLTIMO BACKGROUND AGORA É DEFINIDO PELA CONSTANTE ACIMA
+        ];
+        
         const PLATFORM_TEXTURE_URL_PHASE_1 = 'https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/pixil-frame-0%20(7).png';
         
-        const backgroundImage = new Image();
-        let backgroundLoaded = false;
+        const backgroundImages = [];
+        const collectibleImages = {};
+        let backgroundLoadedCount = 0;
+        let collectibleImagesLoadedCount = 0;
+        let totalCollectibleImagesToLoad = 0;
+
+        let currentBackground = null; 
         const platformTextureImage = new Image();
         let platformTextureLoaded = false;
+        let playerImageLoaded = false;
         
-        const starImage = new Image();
-        let starImageLoaded = false;
-
-        function loadPhaseAssets() {
-            backgroundLoaded = false;
-            platformTextureLoaded = false;
-
-            backgroundImage.onload = () => { backgroundLoaded = true; };
-            backgroundImage.onerror = () => { console.error("Erro ao carregar imagem de background."); };
-            backgroundImage.src = BACKGROUND_URL_PHASE_1;
-            
-            platformTextureImage.onload = () => { platformTextureLoaded = true; };
-            platformTextureImage.onerror = () => { console.error("Erro ao carregar textura da plataforma."); };
-            platformTextureImage.src = PLATFORM_TEXTURE_URL_PHASE_1;
-
-            starImage.onload = () => { starImageLoaded = true; };
-            starImage.onerror = () => { console.error("Erro ao carregar a imagem do Avião."); };
-            starImage.src = "https://uploads.onecompiler.io/43s2gnt72/43zr2vkng/pixil-frame-0.png";
+        function checkAllAssetsLoaded() {
+            if (backgroundLoadedCount === BACKGROUND_URLS.length && platformTextureLoaded 
+                && playerImageLoaded && collectibleImagesLoadedCount === totalCollectibleImagesToLoad) {
+                currentBackground = backgroundImages[0]; 
+                loop(); 
+            } else {
+                setTimeout(checkAllAssetsLoaded, 100);
+            }
         }
 
-        loadPhaseAssets();
-        
+        function loadPhaseAssets() {
+            const assetLoaded = (name) => { /* console.log(`${name} carregado.`); */ };
+
+            // Carrega todos os backgrounds
+            BACKGROUND_URLS.forEach((url, index) => {
+                const img = new Image();
+                img.onload = () => { backgroundLoadedCount++; assetLoaded(`Background ${index + 1}`); };
+                img.onerror = () => { backgroundLoadedCount++; assetLoaded(`Background ${index + 1} (Error)`); };
+                img.src = url;
+                backgroundImages.push(img);
+            });
+            
+            // Carrega imagens dos itens coletáveis (incluindo 'miguel_icon')
+            const uniqueCollectibleUrls = new Set(Object.values(COLLECTIBLE_IMAGE_URLS));
+            totalCollectibleImagesToLoad = uniqueCollectibleUrls.size;
+
+            uniqueCollectibleUrls.forEach(url => {
+                const img = new Image();
+                img.onload = () => { collectibleImagesLoadedCount++; assetLoaded(`Collectible Image ${url}`); };
+                img.onerror = () => { collectibleImagesLoadedCount++; assetLoaded(`Collectible Image ${url} (Error)`); };
+                img.src = url;
+                // Mapeia a imagem para o tipo de item
+                for (const type in COLLECTIBLE_IMAGE_URLS) {
+                    if (COLLECTIBLE_IMAGE_URLS[type] === url) {
+                        collectibleImages[type] = img;
+                    }
+                }
+            });
+            
+            platformTextureImage.onload = () => { platformTextureLoaded = true; assetLoaded("Plat Texture"); };
+            platformTextureImage.onerror = () => { platformTextureLoaded = true; assetLoaded("Plat Texture (Error)"); };
+            platformTextureImage.src = PLATFORM_TEXTURE_URL_PHASE_1;
+
+            // O objeto player carrega sua própria imagem
+            player.load(PLAYER_IMAGE_URL, () => {
+                playerImageLoaded = true;
+                assetLoaded("Player");
+            });
+
+            checkAllAssetsLoaded();
+        }
+
         // --- OBJETO JOGADOR ---
-        let player = { 
+        let player = {
             x: 50,
-            y: GROUND_LEVEL_Y - 60 * SCALE_FACTOR, 
+            y: GROUND_LEVEL_Y - 60 * SCALE_FACTOR,
             w: 48 * SCALE_FACTOR,
             h: 60 * SCALE_FACTOR,
             velX: 0,
@@ -149,13 +402,13 @@
             isJumping: false,
             frame: 0,
             frameTimer: 0,
-            direction: 1,
+            direction: 1, // 1 para direita, -1 para esquerda
             img: new Image(),
             imageLoaded: false,
 
-            load: function(url) {
-                this.img.onload = () => { this.imageLoaded = true; };
-                this.img.onerror = () => { console.error("Erro ao carregar a imagem do Player."); };
+            load: function(url, callback) {
+                this.img.onload = () => { this.imageLoaded = true; if(callback) callback(); };
+                this.img.onerror = () => { this.imageLoaded = true; if(callback) callback(); };
                 this.img.src = url;
             },
             draw: function() {
@@ -164,207 +417,538 @@
                 const pw = this.w;
                 const ph = this.h;
                 
-                let body_offset_y = 0;
-                if (Math.abs(this.velX) > 0 && !this.isJumping) {
-                    if (this.frame === 0 || this.frame === 2) {
-                        body_offset_y = BODY_BOB;
-                    }
-                }
+                // Animação de "balanço" (bob) do corpo ao andar
+                let body_offset_y = (Math.abs(this.velX) > 0 && !this.isJumping && (this.frame === 0 || this.frame === 2)) ? BODY_BOB : 0;
                 
                 ctx.save();
                 if (this.direction === -1) {
+                    // Inverte a imagem horizontalmente
                     ctx.translate(px + pw / 2, 0);
                     ctx.scale(-1, 1);
                     ctx.translate(-(px + pw / 2), 0);
                 }
+                
                 if (this.imageLoaded) {
+                    // Desenha o sprite na posição correta, aplicando o offset do corpo
                     ctx.drawImage(this.img, px, py + body_offset_y, pw, ph - body_offset_y);
                 } else {
-                    ctx.fillStyle = '#FF4500'; 
+                    // Fallback se a imagem não carregar
+                    ctx.fillStyle = '#FF4500';
                     ctx.fillRect(px, py + body_offset_y, pw, ph - body_offset_y);
                 }
                 ctx.restore();
             }
         };
         
-        player.load("https://uploads.onecompiler.io/43s2gnt72/43zhwdcza/1000112034.png");
-
-        // --- ITEM FINAL (AVIÃO) ---
+        // --- ITENS COLETÁVEIS E DIÁLOGO ---
         
-        let finalItem = null; 
-        
-        function createStar(x, y) {
+        function createCollectible(itemConfig, x, y) {
+            const itemWidth = 30 * SCALE_FACTOR;
+            const itemHeight = 30 * SCALE_FACTOR;
             return {
-                x: x, 
-                y: y,
-                w: 30 * SCALE_FACTOR, 
-                h: 30 * SCALE_FACTOR,
-                isCollected: false,
-                isFinal: true
+                x: x - itemWidth / 2, 
+                y: y - itemHeight,
+                w: itemWidth, 
+                h: itemHeight, 
+                isCollected: false, 
+                config: itemConfig
             };
         }
 
-        function drawFinalItem() {
-            if (!finalItem || finalItem.isCollected) return;
+        function drawCollectibles() {
+            collectibles.forEach(item => {
+                if (item.isCollected) return;
 
-            const starScreenX = finalItem.x - camera.x;
-            const starScreenY = finalItem.y - camera.y;
+                const itemScreenX = item.x - camera.x;
+                const itemScreenY = item.y - camera.y;
+                const itemImage = collectibleImages[item.config.type];
 
-            if (starImageLoaded) {
-                ctx.drawImage(starImage, starScreenX, starScreenY, finalItem.w, finalItem.h);
-            } else { 
-                ctx.fillStyle = '#FFD700'; 
-                ctx.fillRect(starScreenX, starScreenY, finalItem.w, finalItem.h);
+                if (itemImage) {
+                    // Efeito de brilho
+                    ctx.save();
+                    ctx.shadowColor = item.config.isFinal ? '#FFD700' : '#00FFFF'; // Amarelo para final, Ciano para outros
+                    ctx.shadowBlur = 10;
+                    ctx.drawImage(itemImage, itemScreenX, itemScreenY, item.w, item.h);
+                    ctx.restore();
+                } else {
+                    // Fallback se a imagem não carregar
+                    ctx.fillStyle = item.config.isFinal ? '#FFD700' : '#00FFFF';
+                    ctx.fillRect(itemScreenX, itemScreenY, item.w, item.h);
+                }
+            });
+        }
+        
+        // Função para mapear o 'speaker' do diálogo ao nome de exibição e ícone
+        function getSpeakerInfo(speakerKey, itemType) {
+            const speakerMap = {
+                'miguel': { name: 'Miguel', icon: 'miguel_icon' },
+                // Usa o ícone do avião para o Pequeno Príncipe
+                'principe': { name: 'P. Príncipe', icon: 'principe' }, 
+                'raposa': { name: 'Raposa', icon: 'raposa' },
+            };
+            
+            // Retorna o mapeamento, ou um fallback usando o item coletado.
+            return speakerMap[speakerKey] || { name: 'Desconhecido', icon: itemType };
+        }
+
+        function showCurrentLine() {
+            if (!currentDialogue) return;
+
+            const line = currentDialogue.dialogueLines[currentLineIndex];
+            
+            // Determine o ícone e o nome do falante
+            let speakerInfo = getSpeakerInfo(line.speaker, currentDialogue.type);
+            
+            // Lógica para garantir os ícones corretos
+            if (currentDialogue.type === 'raposa') {
+                if (line.speaker === 'miguel') { speakerInfo.icon = 'miguel_icon'; }
+                if (line.speaker === 'raposa') { speakerInfo.icon = 'raposa'; }
+            }
+            if (line.speaker === 'principe') {
+                speakerInfo.icon = 'principe';
+            }
+            
+            // Caso especial para o diálogo final, se ele estiver rodando, exibe o ícone da raposa
+            if (currentDialogue.dialogueLines === END_GAME_DIALOGUE) {
+                 speakerInfo = { name: 'Raposa', icon: 'raposa' };
+            }
+
+
+            let contentHTML = '';
+            const iconImage = collectibleImages[speakerInfo.icon];
+            
+            // Adiciona o ícone do falante
+            if (iconImage) {  
+                contentHTML += `<img src="${iconImage.src}" class="icon-dialogue">`;  
+            }
+            
+            // Adiciona o nome do falante e o texto
+            contentHTML += `<span class="speaker-name">${speakerInfo.name}:</span>`;
+            contentHTML += `<div class="message-content">${line.text}</div>`;
+            
+            // Adiciona o botão "Próximo" ou "FIM"
+            if (currentLineIndex < currentDialogue.dialogueLines.length - 1) {
+                contentHTML += `<button id="nextButton" onclick="nextDialogueLine()">PRÓXIMO</button>`;
+            } else {
+                // Última fala: o botão fechará o painel
+                contentHTML += `<button id="nextButton" onclick="nextDialogueLine()">FECHAR</button>`;
+            }
+
+            messagePanel.innerHTML = contentHTML;
+            messagePanel.style.display = 'block';
+
+            isDialogueRunning = true;
+        }
+
+        // A nova função global para avançar o diálogo
+        function nextDialogueLine() {
+            if (!currentDialogue) return;
+
+            currentLineIndex++;
+
+            if (currentLineIndex < currentDialogue.dialogueLines.length) {
+                showCurrentLine();
+            } else {
+                // Diálogo terminado
+                messagePanel.style.display = 'none';
+                isDialogueRunning = false;
+                currentDialogue = null;
+                currentLineIndex = 0;
+                
+                // Se o último item foi coletado, inicia a transição final
+                if (collectibles.length > 0 && collectibles[collectibles.length - 1].isCollected) {
+                    startTransition();
+                }
             }
         }
         
-        function showMessagePanel(message) {
-            messagePanel.innerHTML = message;
-            messagePanel.style.display = 'block';
+        // Função para iniciar o Diálogo Final (Chamado após a transição preta)
+        function startFinalDialogue() { 
+            // Usa o sistema de diálogo existente com uma configuração final.
+            const finalDialogueConfig = {
+                type: 'raposa', 
+                name: 'Raposa', 
+                dialogueLines: END_GAME_DIALOGUE,
+                isFinal: true 
+            };
+            
+            // Reutiliza a lógica de inicialização de diálogo
+            currentDialogue = finalDialogueConfig;
+            currentLineIndex = 0;
+            showCurrentLine();
+        }
+
+        // Função para iniciar a Transição
+        function startTransition() {
+            if (isTransitioning || isGameOver) return;
+            isTransitioning = true;
+            timerRunning = false; // Para o cronômetro
+        }
+
+        function startDialogue(itemConfig) { 
+            if (isDialogueRunning || isQuizRunning || isTransitioning) return; // Garante que não inicie se o quiz estiver rodando
+
+            if (Array.isArray(itemConfig.dialogueLines) && itemConfig.dialogueLines.length > 0) {
+                currentDialogue = itemConfig;
+                currentLineIndex = 0;
+                showCurrentLine();
+            } 
         }
         
-        // --- PLATAFORMAS (DEFINIÇÃO DO MAPA) ---
+        // --- LÓGICA DO QUIZ ---
+        
+        // Função para iniciar o Quiz
+        function startQuiz(itemConfig) {
+            if (isQuizRunning || isDialogueRunning || isTransitioning) return;
+
+            // Resetar o estado do quiz
+            currentQuizIndex = 0;
+            quizScore = 0;
+            isQuizRunning = true;
+            currentDialogue = itemConfig; // Armazena a configuração para o diálogo pós-quiz
+
+            showCurrentQuestion();
+        }
+
+        // Função para exibir a pergunta atual
+        function showCurrentQuestion() {
+            if (!isQuizRunning) return;
+            
+            const questionData = QUIZ_QUESTIONS[currentQuizIndex];
+            let contentHTML = '';
+
+            // Adiciona o título e a pergunta
+            contentHTML += `<span class="speaker-name" style="text-align: center; padding-left: 0; display: block; margin-bottom: 10px;">QUIZ FINAL (Pergunta ${currentQuizIndex + 1}/${QUIZ_QUESTIONS.length})</span>`;
+            contentHTML += `<div class="question-text">${questionData.question}</div>`;
+            
+            // Adiciona os botões de resposta
+            contentHTML += `<div id="quizButtons">`;
+            // Note: answerQuestion precisa estar no escopo global para funcionar no onclick
+            contentHTML += `<button class="quiz-button" onclick="answerQuestion('Sim')">SIM</button>`;
+            contentHTML += `<button class="quiz-button nao" onclick="answerQuestion('Não')">NÃO</button>`;
+            contentHTML += `</div>`;
+            
+            quizPanel.innerHTML = contentHTML;
+            quizPanel.style.display = 'block';
+        }
+
+        // Função chamada ao clicar em "Sim" ou "Não"
+        window.answerQuestion = function(answer) {
+            if (!isQuizRunning) return;
+            
+            const questionData = QUIZ_QUESTIONS[currentQuizIndex];
+            
+            // Verifica a resposta
+            if (answer === questionData.correct) {
+                quizScore++;
+            }
+            
+            currentQuizIndex++;
+            
+            // Verifica se o quiz terminou
+            if (currentQuizIndex < QUIZ_QUESTIONS.length) {
+                // Próxima pergunta
+                showCurrentQuestion();
+            } else {
+                // Fim do quiz
+                endQuiz();
+            }
+        }
+
+        // Função chamada ao final do quiz
+        function endQuiz() {
+            quizPanel.style.display = 'none';
+            isQuizRunning = false;
+            
+            // Mensagem do resultado
+            let finalMessage = `Você demonstrou que absorveu ${quizScore*25}% do mundo do Pequeno Miguel.`;
+            
+            // Cria uma nova primeira linha com o resultado, dita pelo Pequeno Príncipe
+            const resultLine = { 
+                speaker: 'principe', 
+                text: `Ótimo! ${finalMessage} Agora podemos conversar com a Raposa e terminar a jornada!` 
+            };
+
+            // Insere o resultado antes do diálogo original da Raposa
+            const originalDialogue = currentDialogue.dialogueLines;
+            const newDialogueLines = [resultLine, ...originalDialogue];
+            
+            // Inicia o diálogo final com a Raposa (usando as novas linhas)
+            startDialogue({
+                type: currentDialogue.type,
+                name: currentDialogue.name,
+                dialogueLines: newDialogueLines,
+                isFinal: currentDialogue.isFinal
+            });
+        }
+
+
+        // --- PLATAFORMAS E GERAÇÃO DO MUNDO ---
+        
         let platforms = [
-            {x: 0, y: GROUND_LEVEL_Y, w: CW * 1000, h: 1, isGround: true}, 
+            // Plataforma inicial (chão)
+            {x: 0, y: GROUND_LEVEL_Y, w: CW * 1000, h: 1, isGround: true},
         ];
 
         let lastPlatformX = 0;
-        let lastPlatformY = GROUND_LEVEL_Y; 
+        let lastPlatformY = GROUND_LEVEL_Y;
         
-        // --- FUNÇÃO DE GERAÇÃO DE PLATAFORMAS PROCEDURAIS METICULOSAS ---
-        function generateRandomPlatforms() {
-            if (lastPlatformX >= WORLD_LENGTH_PHASE_1) {
-                
-                if (!finalItem) {
-                    const lastPlatform = platforms.slice().reverse().find(p => !p.isGround); 
-                    
-                    const itemWidth = 30 * SCALE_FACTOR;
-                    const itemHeight = 30 * SCALE_FACTOR;
+        /**
+         * Coloca todos os itens coletáveis nas plataformas ou no chão
+         * quando a geração atinge o ponto X do item.
+         */
+        function placeCollectibleItems() {
+             if (hasItemsBeenPlaced) return;
 
-                    if (lastPlatform) {
-                        finalItem = createStar(
-                            lastPlatform.x + lastPlatform.w / 2 - itemWidth / 2, 
-                            lastPlatform.y - itemHeight
-                        );
-                    } else {
-                        // FALLBACK ROBUSTO
-                        finalItem = createStar(WORLD_LENGTH_PHASE_1 - itemWidth, GROUND_LEVEL_Y - itemHeight);
+            // Ordena os itens para garantir que sejam colocados em ordem crescente de X
+            const sortedItems = COLLECTIBLE_ITEMS.sort((a, b) => a.progress - b.progress);
+
+            sortedItems.forEach(itemConfig => {
+                const targetX = (WORLD_LENGTH_PHASE_1 * itemConfig.progress) / 100;
+                
+                // Encontra a plataforma mais próxima e à esquerda ou que cubra o targetX
+                let bestPlatform = platforms[0]; // Começa com o chão
+
+                // Procura a plataforma mais próxima antes ou sobre o targetX
+                for (let i = 1; i < platforms.length; i++) {
+                    const p = platforms[i];
+                    if (p.x < targetX) {
+                        bestPlatform = p;
+                    }
+                    // Se a plataforma cruzar o targetX, usamos ela
+                    if (p.x + p.w >= targetX && p.x < targetX) {
+                        bestPlatform = p;
+                        break;
                     }
                 }
+
+                // Posiciona o item no centro da plataforma (ou na posição X alvo se for o chão)
+                let itemX = targetX;
+                let itemY = bestPlatform.y;
+
+                if (!bestPlatform.isGround) {
+                    itemX = bestPlatform.x + bestPlatform.w / 2;
+                }
                 
+                // Garante que o item não se sobreponha a um já existente (opcional, mas bom)
+                const isOverlapping = collectibles.some(
+                    c => Math.abs(c.x - itemX) < c.w * 1.5 // Distância mínima entre itens
+                );
+
+                if (!isOverlapping) {
+                    collectibles.push(createCollectible(itemConfig, itemX, itemY));
+                }
+            });
+
+            hasItemsBeenPlaced = true;
+        }
+
+        function generateRandomPlatforms() {
+             // Chamada única para garantir a colocação dos itens
+             if (lastPlatformX >= WORLD_LENGTH_PHASE_1 * 0.99 && !hasItemsBeenPlaced) {
+                 placeCollectibleItems(); 
+             }
+            
+            // Se o mundo já tiver sido completamente percorrido
+            if (lastPlatformX >= WORLD_LENGTH_PHASE_1) {
                 return;
             }
             
             const remainingWidth = WORLD_LENGTH_PHASE_1 - lastPlatformX;
-            const generationWidth = Math.min(CW * 1.5, remainingWidth); 
+            const generationWidth = Math.min(CW * 1.5, remainingWidth);
             
-            if (generationWidth <= 0) return;
+            if (generationWidth <= 0) {
+                return;
+            }
 
-            const startX = lastPlatformX; 
-            let currentX = startX + getRandomInt(player.w * 2, player.w * 3); 
+            const MAX_PLATFORM_WIDTH = 100 * SCALE_FACTOR;
+            const MIN_GAP = player.w * 0.8;
+            const MAX_GAP = player.w * 2.3; 
             
-            let platformGeneratedNearLimit = false; 
+            let currentX = lastPlatformX;
+            
+            while (currentX < lastPlatformX + generationWidth && currentX < WORLD_LENGTH_PHASE_1) {
+                
+                const gap = getRandomInt(MIN_GAP, MAX_GAP);
+                const nextX = currentX + gap;
+                
+                if (nextX >= WORLD_LENGTH_PHASE_1) break;
 
-            while (currentX < startX + generationWidth) {
+                const pWidth = getRandomInt(PLATFORM_MIN_WIDTH, MAX_PLATFORM_WIDTH);
+                const actualPWidth = Math.min(pWidth, WORLD_LENGTH_PHASE_1 - nextX);
                 
-                const pWidth = getRandomInt(PLATFORM_MIN_WIDTH, PLATFORM_MAX_WIDTH);
-                
-                // 1. CALCULA O NOVO Y 
-                const minChangeY = lastPlatformY - MAX_Y_CHANGE;
-                const maxChangeY = lastPlatformY + MAX_Y_CHANGE;
-                const y_min = player.h * 2; 
-                const y_max = GROUND_LEVEL_Y - PLATFORM_HEIGHT - MIN_PLATFORM_HEIGHT_FROM_GROUND; 
-                const maxUpY = lastPlatformY - JUMP_HEIGHT; 
-
-                let newY = getRandomInt(
-                    Math.max(y_min, minChangeY, maxUpY), 
-                    Math.min(y_max, maxChangeY)          
-                );
-                
-                // 2. DEFINE O GAP 
-                const currentGapMultiplier = Math.random() < 0.5 ? MAX_GAP : MIN_GAP; 
-                const minGap = player.w * MIN_GAP; 
-                const maxGap = player.w * currentGapMultiplier; 
-                
-                const nextPlatformEnd = currentX + pWidth;
-                
-                if (nextPlatformEnd <= WORLD_LENGTH_PHASE_1) {
-                    platforms.push({x: currentX, y: newY, w: pWidth, h: PLATFORM_HEIGHT, isGround: false});
-
-                    // 3. ATUALIZA RASTREADORES
-                    lastPlatformY = newY;
-                    lastPlatformX = currentX + pWidth;
-                    currentX = lastPlatformX + getRandomInt(minGap, maxGap);
-                    
-                } else {
-                    const finalPWidth = WORLD_LENGTH_PHASE_1 - currentX;
-                    if (finalPWidth > PLATFORM_MIN_WIDTH / 2) {
-                         platforms.push({x: currentX, y: newY, w: finalPWidth, h: PLATFORM_HEIGHT, isGround: false});
-                         lastPlatformX = currentX + finalPWidth;
-                    }
-                    platformGeneratedNearLimit = true;
+                if (actualPWidth < PLATFORM_MIN_WIDTH / 2) {
+                    lastPlatformX = WORLD_LENGTH_PHASE_1;
                     break;
                 }
+                
+                const MAX_Y_CHANGE = 120 * SCALE_FACTOR;
+                const MIN_PLATFORM_HEIGHT_FROM_GROUND = 80 * SCALE_FACTOR;
+                const JUMP_HEIGHT = JUMP_POWER * -1.5;
+
+                const y_min = player.h * 2;
+                const y_max = GROUND_LEVEL_Y - PLATFORM_HEIGHT - MIN_PLATFORM_HEIGHT_FROM_GROUND;
+                const maxUpY = lastPlatformY - JUMP_HEIGHT; 
+
+                // Determina uma nova altura razoável
+                let newY = getRandomInt(
+                    Math.max(y_min, lastPlatformY - MAX_Y_CHANGE, maxUpY),
+                    Math.min(y_max, lastPlatformY + MAX_Y_CHANGE)
+                );
+                
+                platforms.push({x: nextX, y: newY, w: actualPWidth, h: PLATFORM_HEIGHT, isGround: false});
+
+                lastPlatformY = newY;
+                currentX = nextX + actualPWidth;
+                lastPlatformX = currentX;
             }
             
-            if (lastPlatformX >= WORLD_LENGTH_PHASE_1 || platformGeneratedNearLimit) {
-                generateRandomPlatforms(); 
-            }
-
+            // Remove plataformas antigas que saíram da tela para otimizar
             platforms = platforms.filter(p => p.isGround || p.x + p.w > camera.x - CW);
+            
+            // Se a geração alcançou um ponto de item, tente colocá-lo (principalmente para o chão)
+            if (!hasItemsBeenPlaced) {
+                 COLLECTIBLE_ITEMS.forEach(itemConfig => {
+                    const targetX = (WORLD_LENGTH_PHASE_1 * itemConfig.progress) / 100;
+                    if (lastPlatformX >= targetX) {
+                        placeCollectibleItems();
+                    }
+                });
+            }
         }
 
-        generateRandomPlatforms(); 
+        generateRandomPlatforms(); // Gera plataformas iniciais
 
-        // --- ENTRADAS, UPDATE, DRAW (Inalterado) ---
+        // --- UPDATE (Game Logic) e INPUTS ---
+
         let keys = {};
         document.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if (!isGameOver && (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && !player.isJumping) {
+            if (!isGameOver && !isDialogueRunning && !isQuizRunning && !isTransitioning && (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') && !player.isJumping) {
                 player.velY = JUMP_POWER;
                 player.isJumping = true;
             }
         });
-        document.addEventListener('keyup', (e) => {
-            keys[e.code] = false;
-        });
-
+        document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+        
         function checkCollision(obj1, obj2) {
-            return (
-                obj1.x < obj2.x + obj2.w && 
-                obj1.x + obj1.w > obj2.x &&
-                obj1.y < obj2.y + obj2.h &&
-                obj1.y + obj1.h > obj2.y
-            );
+            return (obj1.x < obj2.x + obj2.w && obj1.x + obj1.w > obj2.x && obj1.y < obj2.y + obj2.h && obj1.y + obj1.h > obj2.y);
         }
 
-        function updateAnimation() {
+        function update() {
+            
+            // [MODIFICADO] Lógica da Transição
+            if (isTransitioning) {
+                if (transitionY < 0) {
+                    transitionY += TRANSITION_SPEED;
+                } else {
+                    transitionY = 0; 
+                    isTransitioning = false;
+                    isGameOver = true; // Transição completa
+                    
+                    // Inicia o diálogo final assim que a tela preta desce
+                    if (!hasFinalDialogueRun) {
+                        startFinalDialogue();
+                        hasFinalDialogueRun = true;
+                    }
+                }
+                return; // Bloqueia o update do jogo enquanto transiciona
+            }
+
+            // Para o jogo se o jogo acabou, o diálogo está rodando OU O QUIZ ESTÁ RODANDO
+            if (isGameOver || isDialogueRunning || isQuizRunning) { 
+                 if (timerRunning) elapsedTime = performance.now() - startTime;
+                 return; 
+            }
+            
+            let movementX = 0;
+            player.velX = 0;
+            
+            if (keys['ArrowLeft'] || keys['KeyA']) { movementX = -MOVE_SPEED; player.velX = -MOVE_SPEED; player.direction = -1; }
+            if (keys['ArrowRight'] || keys['KeyD']) { movementX = MOVE_SPEED; player.velX = MOVE_SPEED; player.direction = 1; }
+
+            // Inicia o cronômetro no primeiro movimento
+            if (!timerRunning && (Math.abs(movementX) > 0 || keys['Space'] || keys['ArrowUp'] || keys['KeyW'])) {
+                startTime = performance.now();
+                timerRunning = true;
+            }
+            if (timerRunning) { elapsedTime = performance.now() - startTime; }
+
+            // Animação de corrida
             if (Math.abs(player.velX) > 0 && !player.isJumping) {
                 player.frameTimer++;
-                if (player.frameTimer >= ANIMATION_SPEED) {
-                    player.frameTimer = 0;
-                    player.frame = (player.frame + 1) % 3;
+                if (player.frameTimer >= ANIMATION_SPEED) { player.frameTimer = 0; player.frame = (player.frame + 1) % 3; }
+            } else { player.frame = 1; player.frameTimer = 0; } // Pára na pose "parado"
+
+            // Aplica gravidade e movimento
+            player.velY += GRAVITY;
+            player.y += player.velY;
+            player.x += movementX;
+            
+            // Limites do mundo (X)
+            if (player.x < 0) { player.x = 0; player.velX = 0; }
+            if (player.x + player.w >= WORLD_LENGTH_PHASE_1) { player.x = WORLD_LENGTH_PHASE_1 - player.w; player.velX = 0; }
+            
+            // Câmera segue o jogador, mantendo-o um pouco à esquerda
+            camera.x = player.x - 50;
+            
+            // Gatilho para geração de plataformas
+            if (player.x > lastPlatformX - CW + WORLD_GEN_THRESHOLD || lastPlatformX < WORLD_LENGTH_PHASE_1) { 
+                generateRandomPlatforms(); 
+            }
+            
+            // Colisões com plataformas (apenas pela parte de cima)
+            platforms.forEach(p => {
+                const isFalling = player.velY >= 0;
+                const isAbove = player.y + player.h <= p.y + player.velY; 
+                
+                if (player.x + player.w > p.x && player.x < p.x + p.w && isAbove && player.y + player.h >= p.y && isFalling) {
+                    player.y = p.y - player.h; 
+                    player.velY = 0; 
+                    player.isJumping = false;
                 }
-            } else {
-                player.frame = 1;
-                player.frameTimer = 0;
+            });
+            
+            // Colisão com o chão (ground level)
+            if (player.y + player.h > GROUND_LEVEL_Y && player.velY >= 0) {
+                player.y = GROUND_LEVEL_Y - player.h; 
+                player.velY = 0; 
+                player.isJumping = false;
             }
+            
+            // Se cair muito abaixo (Morte/Respawn)
+            if (player.y > CH * 2) { 
+                player.x = camera.x + 100; 
+                player.y = GROUND_LEVEL_Y - player.h; 
+                player.velY = 0; 
+                player.isJumping = false; 
+                camera.y = 0; 
+            }
+            
+            // Colisão com Itens Coletáveis
+            collectibles.forEach(item => {
+                if (item.isCollected) return;
+
+                const itemWorld = { x: item.x, y: item.y, w: item.w, h: item.h };
+                const playerWorld = { x: player.x, y: player.y, w: player.w, h: player.h };
+                
+                if (checkCollision(playerWorld, itemWorld)) {
+                    item.isCollected = true;
+                    score++;
+                    gameProgress++; // Aumenta o contador de progresso
+                    
+                    // Se for o item 'raposa' (final), inicia o QUIZ
+                    if (item.config.type === 'raposa') {
+                        startQuiz(item.config); // Inicia o quiz
+                    } else {
+                        startDialogue(item.config); // Inicia o diálogo
+                    }
+                }
+            });
         }
 
-        function updateCamera() {
-            const playerScreenY = player.y - camera.y;
+        // --- DRAW (Renderização) ---
 
-            if (playerScreenY < CAMERA_Y_ANCHOR - 100) {
-                camera.y = player.y - (CAMERA_Y_ANCHOR - 100);
-            }
-            if (playerScreenY > CAMERA_Y_ANCHOR + 50) {
-                camera.y = player.y - (CAMERA_Y_ANCHOR + 50);
-            }
-            if (camera.y < 0) {
-                camera.y = 0;
-            }
-        }
-        
         function formatTime(ms) {
             const totalSeconds = ms / 1000;
             const minutes = Math.floor(totalSeconds / 60);
@@ -374,136 +958,64 @@
             return `${pad(minutes)}:${pad(seconds)}.${pad(milliseconds)}`;
         }
         
+        // Função para obter o background com base na posição do jogador
+        function getBackgroundByProgress() {
+            if (backgroundImages.length === 0) return null;
+            
+            const progress = player.x / WORLD_LENGTH_PHASE_1;
+            
+            // Seleciona o BG correto com base no progresso (0-25%, 25-50%, 50-75%, 75-100%)
+            if (progress >= 0.75) {
+                return backgroundImages[3]; 
+            } else if (progress >= 0.50) {
+                return backgroundImages[2]; 
+            } else if (progress >= 0.25) {
+                return backgroundImages[1]; 
+            } else {
+                return backgroundImages[0];
+            }
+        }
+
         function drawBackground() {
-            if (!backgroundLoaded) {
+            currentBackground = getBackgroundByProgress();
+            
+            if (!currentBackground || !currentBackground.width) {
                 ctx.fillStyle = '#ADD8E6';
                 ctx.fillRect(0, 0, CW, CH);
                 return;
             }
-            
-            const bgW = backgroundImage.width;
-            const bgH = backgroundImage.height;
+
+            const bgW = currentBackground.width;
+            const bgH = currentBackground.height;
             const ratio = Math.max(CW / bgW, CH / bgH);
             const destW = bgW * ratio;
             const destH = CH;
-
+            
+            // Calcula o offset do parallax
             let bgOffset = (camera.x * PARALLAX_FACTOR) % destW;
             if (bgOffset < 0) bgOffset += destW;
             
-            ctx.drawImage(backgroundImage, 0, 0, bgW, bgH, -bgOffset, 0, destW, destH);
-            ctx.drawImage(backgroundImage, 0, 0, bgW, bgH, -bgOffset + destW, 0, destW, destH);
+            // Desenha duas cópias para criar um loop contínuo
+            ctx.drawImage(currentBackground, 0, 0, bgW, bgH, -bgOffset, 0, destW, destH);
+            ctx.drawImage(currentBackground, 0, 0, bgW, bgH, -bgOffset + destW, 0, destW, destH);
         }
 
-
-        function update() {
-            if (isGameOver) {
-                timerRunning = false;
-                return;
-            }
-            
-            let movementX = 0;
-            player.velX = 0;
-            
-            if (keys['ArrowLeft'] || keys['KeyA']) {
-                movementX = -MOVE_SPEED; 
-                player.velX = -MOVE_SPEED;
-                player.direction = -1;
-            }
-            if (keys['ArrowRight'] || keys['KeyD']) {
-                movementX = MOVE_SPEED;
-                player.velX = MOVE_SPEED;
-                player.direction = 1;
-            }
-
-            if (!timerRunning && (Math.abs(movementX) > 0 || keys['Space'] || keys['ArrowUp'] || keys['KeyW'])) {
-                startTime = performance.now();
-                timerRunning = true;
-            }
-            if (timerRunning) {
-                elapsedTime = performance.now() - startTime;
-            }
-
-            updateAnimation();
-
-            player.velY += GRAVITY;
-            player.y += player.velY;
-            
-            player.x += movementX;
-            
-            if (player.x + player.w >= WORLD_LENGTH_PHASE_1) {
-                player.x = WORLD_LENGTH_PHASE_1 - player.w; 
-                player.velX = 0;
-            }
-            
-            camera.x = player.x - 50; 
-            
-            if (player.x > lastPlatformX - CW + WORLD_GEN_THRESHOLD && lastPlatformX < WORLD_LENGTH_PHASE_1) {
-                generateRandomPlatforms();
-            }
-
-            updateCamera();
-
-            platforms.forEach(p => {
-                if (
-                    player.x + player.w > p.x &&
-                    player.x < p.x + p.w &&
-                    player.y + player.h <= p.y + player.velY && 
-                    player.y + player.h >= p.y && 
-                    player.velY >= 0 
-                ) {
-                    player.y = p.y - player.h;
-                    player.velY = 0;
-                    player.isJumping = false;
-                }
-            });
-
-            if (player.y + player.h > GROUND_LEVEL_Y && player.velY >= 0) {
-                player.y = GROUND_LEVEL_Y - player.h;
-                player.velY = 0;
-                player.isJumping = false;
-            }
-
-            if (player.y > CH * 2) { 
-                player.x = camera.x + 100;
-                player.y = GROUND_LEVEL_Y - player.h; 
-                player.velY = 0;
-                player.isJumping = false;
-                camera.y = 0;
-            }
-            
-            // Colisão com Item Final (Avião)
-            if (finalItem && !finalItem.isCollected) {
-                const itemWorld = { x: finalItem.x, y: finalItem.y, w: finalItem.w, h: finalItem.h }; 
-                const playerWorld = { x: player.x, y: player.y, w: player.w, h: player.h }; 
-                
-                if (checkCollision(playerWorld, itemWorld)) {
-                    finalItem.isCollected = true;
-                    score++;
-                    isGameOver = true; 
-                    showMessagePanel('—Um avião? Nunca vi nada parecido por aqui. Parece... familiar de alguma história que já li.');
-                }
-            }
-        }
-
-        // --- DRAW (Ajuste da Fonte no Canvas) ---
         function draw() {
             ctx.clearRect(0, 0, CW, CH);
-
+            
+            // 1. Background
             drawBackground();
 
-            const groundYScreen = GROUND_LEVEL_Y - camera.y;
-            ctx.fillStyle = 'transparent'; 
-            ctx.fillRect(0, groundYScreen + 1, CW, CH - groundYScreen - 1); 
-
+            // 2. Plataformas
             platforms.forEach(p => {
+                // Desenha apenas as plataformas não-chão
                 if (!p.isGround) {
                     const screenX = p.x - camera.x;
                     const screenY = p.y - camera.y;
-                    
                     if (screenX + p.w > 0 && screenX < CW) {
                         if (platformTextureLoaded) {
                             ctx.drawImage(platformTextureImage, screenX, screenY, p.w, p.h);
-                        } else { 
+                        } else {
                             ctx.fillStyle = '#888888';
                             ctx.fillRect(screenX, screenY, p.w, p.h);
                         }
@@ -511,37 +1023,70 @@
                 }
             });
 
+            // 3. Itens Coletáveis
+            drawCollectibles();
+
+            // 4. Jogador
             player.draw();
 
-            drawFinalItem();
+            // 5. HUD
+            
+            // Função auxiliar de texto (AGORA COM SUPORTE A BORDA)
+            const drawText = (text, x, y, size = 12, color = 'white', strokeColor = null, lineWidth = 0) => {
+                ctx.font = `${size}px "Press Start 2P", cursive`;
+                
+                // Desenha a borda (stroke) se as configurações forem fornecidas
+                if (strokeColor && lineWidth > 0) {
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = lineWidth;
+                    ctx.strokeText(text, x, y);
+                }
 
-            // --- HUD (Aplicando a Fonte Press Start 2P) ---
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            
-            // Fonte principal (Tempo)
-            // ANTES: ctx.font = '20px Arial'; 
-            ctx.font = '20px "Press Start 2P", cursive'; 
-            ctx.fillText(`TEMPO: ${formatTime(elapsedTime)}`, 10, 25); 
+                // Desenha o preenchimento (fill)
+                ctx.fillStyle = color;
+                ctx.fillText(text, x, y);
+            };
+                
 
-            // Fonte secundária (Controles, Estrelas, Progresso)
-            // ANTES: ctx.font = '16px Arial'; 
-            ctx.font = '12px "Press Start 2P", cursive'; // Reduzindo o tamanho para 12px para melhor legibilidade no Canvas
+            // Desenha o HUD apenas se o jogo não estiver na tela final ou transicionando
+            if (!isGameOver && !isTransitioning) {
+                drawText(`TEMPO: ${formatTime(elapsedTime)}`, 10, 25, 20, 'white', 'black', 3);
+                drawText('SETAS/AD: ANDAR | ESPAÇO/W: PULAR', 10, 50, 20, 'white', 'black', 3);
+                
+                const progress = Math.min(100, Math.floor(player.x / WORLD_LENGTH_PHASE_1 * 100));
+                drawText(`PROGRESSO: ${progress}%`, 10, 75, 20, 'white', 'black', 3);
+                
+                const section = progress >= 75 ? 4 : progress >= 50 ? 3 : progress >= 25 ? 2 : 1;
+                drawText(`Planeta em que estou: ${section}º Planeta`, 10, 105, 20, 'white', 'black', 3);
+
+                drawText(`ITENS COLETADOS: ${gameProgress} / ${COLLECTIBLE_ITEMS.length}`, 10, 135, 20, 'white', 'black', 3);
+            }
             
-            ctx.fillText('SETAS/AD: ANDAR | ESPAÇO/W: PULAR', 10, 50); 
-            ctx.fillText(`ESTRELAS: ${score}`, 10, 75);
-            
-            const progress = Math.min(100, Math.floor(player.x / WORLD_LENGTH_PHASE_1 * 100));
-            ctx.fillText(`PROGRESSO: ${progress}%`, 10, 100);
+            // [NOVA LÓGICA DE TRANSIÇÃO E TELA FINAL]
+            if (isGameOver || isTransitioning) {
+                ctx.save();
+                
+                // Determina a posição Y da tela final/transição (animada)
+                let screenY = isTransitioning ? transitionY : 0;
+                
+                // 1. Fundo da Transição (Cor escura mantida)
+                ctx.fillStyle = FINAL_SCREEN_COLOR; 
+                ctx.fillRect(0, screenY, CW, CH);
+
+                ctx.textAlign = 'left';
+                ctx.restore();
+            }
         }
 
         // --- GAME LOOP ---
         function loop() {
-            update(); 
-            draw(); 
+            update();
+            draw();
             requestAnimationFrame(loop);
-        }   
-
-        loop();
+        }
+        
+        // Inicia o carregamento dos assets
+        loadPhaseAssets();
     </script>
 </body>
 </html>
